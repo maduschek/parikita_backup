@@ -1,0 +1,24 @@
+cat > .gitignore <<'EOF'
+# Credentials and authentication
+mytoken.txt
+frida.log
+*.token
+.env
+.env.*
+
+# Personal backup data
+parikita_backup/
+downloads/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Local binaries
+frida-server*
+
+# Development
+.idea/
+.vscode/
+EOF
