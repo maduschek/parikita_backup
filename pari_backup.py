@@ -16,8 +16,6 @@ from PIL import Image, ExifTags
 with open("mytoken.txt", "r", encoding="utf-8") as f:
     TOKEN = f.readlines()[-1].strip()
 
-print(TOKEN)
-
 BASE = "https://apiparikita.nemborn.com"
 
 # get profile data 
