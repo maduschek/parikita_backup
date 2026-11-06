@@ -16,7 +16,6 @@ from PIL import Image, ExifTags
 with open("mytoken.txt", "r", encoding="utf-8") as f:
     TOKEN = f.readlines()[-1].strip()
 
-
 BASE = "https://apiparikita.nemborn.com"
 
 # IDs are populated from /users/me in main(), before any dependent API calls.
