@@ -16,14 +16,13 @@ from PIL import Image, ExifTags
 with open("mytoken.txt", "r", encoding="utf-8") as f:
     TOKEN = f.readlines()[-1].strip()
 
-print(TOKEN)
 
 BASE = "https://apiparikita.nemborn.com"
 
-# get profile data 
-USER_ID = 0000000
-CHILD_ID = 0000000
-INSTITUTION_ID = 000000
+# IDs are populated from /users/me in main(), before any dependent API calls.
+USER_ID = None
+CHILD_ID = None
+INSTITUTION_ID = None
 
 APP_VERSION = "3.2.1140"
 LANGUAGE = "de"
@@ -32,6 +31,63 @@ USER_AGENT = "okhttp/4.9.0"
 
 OUTDIR = Path("parikita_backup")
 TAKE = 100
+
+
+def select_child(profile: dict) -> tuple[int, int]:
+    """Select a child from /users/me and return (child_id, institution_id).
+
+    The actual API profile contains a `Children` list, where each child has
+    `Id`, `DisplayName`, and `InstitutionId`. An institution is also embedded
+    in `Institution.InstitutionId`, which is used as a fallback.
+    """
+    children = profile.get("Children")
+    if not isinstance(children, list) or not children:
+        raise ValueError("No children found in the /users/me profile.")
+
+    eligible = []
+    for child in children:
+        if not isinstance(child, dict):
+            continue
+        child_id = child.get("Id")
+        institution = child.get("Institution") or {}
+        institution_id = child.get("InstitutionId") or institution.get("InstitutionId")
+        try:
+            child_id = int(child_id)
+            institution_id = int(institution_id)
+            if child_id <= 0 or institution_id <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            print(f"[WARN] Skipping a child entry with missing or invalid IDs: "
+                  f"{child.get('DisplayName') or child.get('Name') or '(unnamed)'}")
+            continue
+        eligible.append((child, child_id, institution_id))
+
+    if not eligible:
+        raise ValueError("No child with a valid child ID and institution ID found.")
+
+    if len(eligible) == 1:
+        child, child_id, institution_id = eligible[0]
+        print(f"Selected child automatically: "
+              f"{child.get('DisplayName') or child.get('Name') or child_id}")
+        return child_id, institution_id
+
+    print("\nMultiple children found. Which child should be backed up?")
+    for index, (child, child_id, institution_id) in enumerate(eligible, 1):
+        institution = child.get("Institution") or {}
+        institution_name = institution.get("InstitutionName") or f"Institution {institution_id}"
+        archived = " [archived]" if child.get("IsArchived") else ""
+        print(f"  {index}. {child.get('DisplayName') or child.get('Name') or child_id} "
+              f"— {institution_name}{archived}")
+
+    while True:
+        try:
+            choice = input(f"Select a child [1-{len(eligible)}]: ").strip()
+        except (EOFError, KeyboardInterrupt) as exc:
+            raise SystemExit("\nChild selection cancelled.") from exc
+        if choice.isdigit() and 1 <= int(choice) <= len(eligible):
+            _, child_id, institution_id = eligible[int(choice) - 1]
+            return child_id, institution_id
+        print(f"Please enter a number between 1 and {len(eligible)}.")
 
 
 def ensure_dir(path: Path) -> None:
@@ -542,8 +598,11 @@ def main():
           f"MobilePhone: {me['MobilePhone']}\n"
           f"UserID: {me['Id']}")
 
-    global USER_ID
+    global USER_ID, CHILD_ID, INSTITUTION_ID
     USER_ID = int(me["Id"])
+    CHILD_ID, INSTITUTION_ID = select_child(me)
+    print(f"Using USER_ID={USER_ID}, CHILD_ID={CHILD_ID}, "
+          f"INSTITUTION_ID={INSTITUTION_ID}\n")
 
     # Optional useful endpoints you already validated
     contactbook = get_json(f"{BASE}/ContactBook/GetLatestMessagesForProxyChildrenAndGroups")
